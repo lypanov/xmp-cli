@@ -6,9 +6,12 @@
  * file for more information.
  */
 
+#include <locale.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #ifdef HAVE_SIGNAL_H
 #include <signal.h>
 #endif
@@ -252,6 +255,11 @@ int main(int argc, char **argv)
 	int val, lf_flag;
 	int flags;
 	int played;
+
+  setlocale(LC_ALL, NULL);
+  setlocale(LC_ALL, "en_US.UTF-8");
+  wprintf(L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+
 #if defined(_WIN32)
 	setvbuf(stderr, NULL, _IONBF, 0);
 	srand(GetTickCount());
@@ -329,6 +337,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
+  /*
 	if (opt.verbose > 0) {
 		report("Extended Module Player " VERSION "\n"
 			"Copyright (C) 1996-2016 Claudio Matsuoka and Hipolito Carraro Jr\n");
@@ -344,6 +353,7 @@ int main(int argc, char **argv)
 
 		report("Press 'h' for help\n\n");
 	}
+  */
 
 	if (opt.probeonly) {
 		exit(EXIT_SUCCESS);
@@ -382,6 +392,7 @@ int main(int argc, char **argv)
 	control.loop = opt.loop;
 	control.explore = opt.explore;
 	control.amiga_mixer = opt.amiga_mixer;
+  control.pause = 1;
 	first = optind;
 
     play_all:
@@ -392,6 +403,7 @@ int main(int argc, char **argv)
 	for (played = 0; optind < argc; optind++) {
 		memcpy(&opt, &save_opt, sizeof (struct options));
 
+    /*
 		if (opt.verbose > 0) {
 			if (lf_flag)
 				report("\n");
@@ -399,6 +411,7 @@ int main(int argc, char **argv)
 			report("Loading %s (%d of %d)\n",
 				argv[optind], optind - first + 1, argc - first);
 		}
+    */
 
 		/* these must be set before loading the module */
 		xmp_set_player(xc, XMP_PLAYER_DEFPAN, opt.defpan);
@@ -522,6 +535,10 @@ int main(int argc, char **argv)
 			refresh_status = 1;
 			info_frame_init();
 			fi.loop_count = 0;
+
+      check_pause(xc, &control, &mi, &fi,
+                  opt.verbose);
+
     play_sequence:
 			while (!opt.info && xmp_play_frame(xc) == 0) {
 				int old_loop = fi.loop_count;

@@ -9,6 +9,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stddef.h>
+#include <wchar.h>
+#include <locale.h>
+#include <math.h>
 #include <xmp.h>
 #include "common.h"
 
@@ -24,21 +28,8 @@ void info_help(void)
 "    b, Left     Return to previous order\n"
 "    n, Up       Advance to next module\n"
 "    p, Down     Return to previous module\n"
-"    h, ?        Display available commands\n"
-"    1 - 0       Mute/unmute channels\n"
-"      !         Unmute all channels\n"
-"      X         Display current mixer type\n"
-"      a         Enable amiga mixer\n"
-"      Z         Display current sequence\n"
-"      z         Toggle subsong explorer mode\n"
-"      l         Toggle loop mode\n"
 "      m         Display module information\n"
-"      i         Display combined instrument/sample list\n"
-"      I         Display instrument list\n"
-"      S         Display sample list\n"
 "      c         Display comment, if any\n"
-"      <         Play previous sequence\n"
-"      >         Play next sequence\n"
 );
 }
 
@@ -47,9 +38,6 @@ void info_mod(const struct xmp_module_info *mi, int mode)
 	int i;
 	int num_seq;
 	int total_time;
-
-	report("Module name  : %s\n", mi->mod->name);
-	report("Module type  : %s", mi->mod->type);
 
 	if (mode != XMP_MODE_AUTO) {
 		struct player_mode *pm;
@@ -61,54 +49,10 @@ void info_mod(const struct xmp_module_info *mi, int mode)
 		}
 	}
 
-	report("\nModule length: %d patterns\n", mi->mod->len);
-	report("Patterns     : %d\n", mi->mod->pat);
-	report("Instruments  : %d\n", mi->mod->ins);
-	report("Samples      : %d\n", mi->mod->smp);
-	report("Channels     : %d [ ", mi->mod->chn);
-
-	for (i = 0; i < mi->mod->chn; i++) {
-		if (mi->mod->xxc[i].flg & XMP_CHANNEL_SYNTH) {
-			report("S ");
-		} else if (mi->mod->xxc[i].flg & XMP_CHANNEL_MUTE) {
-			report("- ");
-		} else if (mi->mod->xxc[i].flg & XMP_CHANNEL_SURROUND) {
-			report("^ ");
-		} else {
-			report("%x ", mi->mod->xxc[i].pan >> 4);
-		}
-	}
-	report("]\n");
-
 	total_time = mi->seq_data[0].duration;
 
-	report("Duration     : %dmin%02ds", (total_time + 500) / 60000,
+	report("Duration     : %dmin%02ds\n", (total_time + 500) / 60000,
 					((total_time + 500) / 1000) % 60);
-
-	/* Check non-zero-length sequences */
-	num_seq = 0;
-	for (i = 0; i <  mi->num_sequences; i++) {
-		if (mi->seq_data[i].duration > 0)
-			num_seq++;
-	}
-
-	if (num_seq > 1) {
-		report(" (main sequence)\n");
-		for (i = 1; i < mi->num_sequences; i++) {
-			int dur = mi->seq_data[i].duration;
-
-			if (dur == 0) {
-				continue;
-			}
-
-			report("               %dmin%02ds "
-				"(sequence %d at position %02X)\n",
-				(dur + 500) / 60000, ((dur + 500) / 1000) % 60,
-				i, mi->seq_data[i].entry_point);
-		}
-	} else {
-		report("\n");
-	}
 }
 
 void info_frame_init(void)
@@ -141,13 +85,15 @@ static void fix_info_02x(int val, char *buf)
 	}
 }
 
+#define MAX(x, y) ((x) > (y)? (x) : (y))
+#define MIN(x, y) ((x) < (y)? (x) : (y))
+
 void info_frame(const struct xmp_module_info *mi, const struct xmp_frame_info *fi, struct control *ctl, int reprint)
 {
 	static int ord = -1, spd = -1, bpm = -1;
 	char rowstr[3], numrowstr[3];
 	char chnstr[3], maxchnstr[3];
 	int time;
-	char x;
 
 	if (fi->virt_used > max_channels)
 		max_channels = fi->virt_used;
@@ -157,71 +103,53 @@ void info_frame(const struct xmp_module_info *mi, const struct xmp_frame_info *f
 
 	time = fi->time / 100;
 
-	/* Show mixer type */
-	x = ' ';
-	if (ctl->amiga_mixer) {
-		switch (ctl->mixer_type) {
-		case XMP_MIXER_STANDARD:
-			x = '-';
-			break;
-		case XMP_MIXER_A500:
-			x = 'A';
-			break;
-		case XMP_MIXER_A500F:
-			x = 'F';
-			break;
-		default:
-			x = 'x';
-		}
-	}
-
-	if (msg_timer > 0) {
-		report("\r%-61.61s %c%c%c", msg_text,
-			ctl->explore ? 'Z' : ' ',
-			ctl->loop ? 'L' : ' ', x);
-		msg_timer -= fi->frame_time * fi->speed / 6;
-		if (msg_timer == 0) {
-			msg_timer--;
-		} else {
-			goto print_time;
-		}
-	}
-
-	if (msg_timer < 0) {
-		reprint = 1;
-		msg_timer = 0;
-	}
-
-	if (reprint || fi->pos != ord || fi->bpm != bpm || fi->speed != spd) {
-		report("\rSpeed[%02X] BPM[%02X] Pos[%02X/%02X] "
-			 "Pat[%02X/%02X] Row[  /  ] Chn[  /  ]      0:00:00.0",
-					fi->speed, fi->bpm,
-					fi->pos, mi->mod->len - 1,
-					fi->pattern, mi->mod->pat - 1);
-		ord = fi->pos;
-		bpm = fi->bpm;
-		spd = fi->speed;
-	}
-
 	fix_info_02x(fi->row, rowstr);
 	fix_info_02x(fi->num_rows - 1, numrowstr);
 	fix_info_02x(fi->virt_used, chnstr);
 	fix_info_02x(max_channels, maxchnstr);
 
-	report("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
-	       "%2.2s/%2.2s] Chn[%2.2s/%2.2s] %c%c%c",
-		rowstr, numrowstr, chnstr, maxchnstr,
-		ctl->explore ? 'Z' : ' ', ctl->loop ? 'L' : ' ', x);
+	wprintf(L"\033[A\33[2K\033[A\33[2K\033[A\33[2K\033[A\33[2K");
+	wprintf(L"\r\x2554\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2557\n");
 
-    print_time:
+  unsigned int dancer = (int)((time / 8) % 2) == 0;
+  wchar_t dancer_l = dancer ? L'\x2666' : L'\x2667';
+  wchar_t dancer_r = dancer ? L'\x2667' : L'\x2666';
+  wchar_t note = L'\x266B';
 
-	if (ctl->pause) {
-		report(" - PAUSED -");
-	} else {
-		report("%3d:%02d:%02d.%d",
-			(int)(time / (60 * 600)), (int)((time / 600) % 60),
-			(int)((time / 10) % 60), (int)(time % 10));
-	}
+  if (ctl->pause) {
+    dancer_l = L'-';
+    dancer_r = L'-';
+    note = L'-';
+  }
+
+  wchar_t *pad = L"~~~~~~~~~~~~~~~~~~~~~~";
+  unsigned int w = 18;
+
+  wchar_t *dirs = L"chiptune upbeat";
+  unsigned int dirs_ln = wcslen(dirs),
+    dirs_pad_l = (w - dirs_ln) / 2, dirs_pad_r = w - dirs_ln - dirs_pad_l;
+  wprintf(L"\r\x2551%lc %.*ls %ls %.*ls %lc\x2551\n",
+         dancer_l, dirs_pad_l, pad, dirs, dirs_pad_r, pad, dancer_r);
+
+  char *nname = mi->mod->name;
+  unsigned int nname_len = strlen(nname);
+  unsigned int name_len = MIN(nname_len, 18);
+  wchar_t name[19];
+  int written = mbstowcs(name, mi->mod->name, name_len);
+  name[written] = L'\0';
+
+  unsigned int name_ln = wcslen(name),
+    name_pad_l = (w - name_ln) / 2, name_pad_r = w - name_ln - name_pad_l;
+	wprintf(L"\r\x2551%lc %.*ls %ls %.*ls %lc\x2551\n",
+         dancer_l, name_pad_l, pad, name, name_pad_r, pad, dancer_r);
+
+  int dtime = (int) time;
+	int duration = (int) mi->seq_data[0].duration;
+  int chars = (2000 * time) / duration;
+
+  wprintf(L"\r\x2551%lc %.*ls%.*ls %lc\x2551\n", note, chars, L"\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F\xEE5F", 20-chars, L"\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C\xEE0C", note);
+
+	wprintf(L"\r\x255A\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x2550\x255D");
 
 	fflush(stdout);
 }
