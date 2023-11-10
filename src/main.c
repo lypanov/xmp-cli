@@ -256,9 +256,9 @@ int main(int argc, char **argv)
 	int flags;
 	int played;
 
-  setlocale(LC_ALL, NULL);
-  setlocale(LC_ALL, "en_US.UTF-8");
-  wprintf(L"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+  setlocale(LC_ALL, "");
+//  setlocale(LC_ALL, "en_US.UTF-8");
+  wprintf(L"loading ... \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
 
 #if defined(_WIN32)
 	setvbuf(stderr, NULL, _IONBF, 0);
